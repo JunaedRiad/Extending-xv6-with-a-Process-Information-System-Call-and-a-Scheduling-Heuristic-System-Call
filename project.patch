@@ -1,0 +1,280 @@
+diff --git a/kernal.c b/kernal.c
+new file mode 100644
+index 0000000..8b13789
+--- /dev/null
++++ b/kernal.c
+@@ -0,0 +1 @@
++
+diff --git a/kernel/defs.h b/kernel/defs.h
+index 122d9ca..4185828 100644
+--- a/kernel/defs.h
++++ b/kernel/defs.h
+@@ -129,9 +129,9 @@ int             strncmp(const char*, const char*, uint);
+ char*           strncpy(char*, const char*, int);
+ 
+ // syscall.c
+-void            argint(int, int*);
++int             argint(int, int*);
+ int             argstr(int, char*, int);
+-void            argaddr(int, uint64 *);
++int             argaddr(int, uint64 *);
+ int             fetchstr(uint64, char*, int);
+ int             fetchaddr(uint64, uint64*);
+ void            syscall();
+diff --git a/kernel/proc.h b/kernel/proc.h
+index d021857..585ab3e 100644
+--- a/kernel/proc.h
++++ b/kernel/proc.h
+@@ -26,7 +26,6 @@ struct cpu {
+   int intena;                 // Were interrupts enabled before push_off()?
+ };
+ 
+-extern struct cpu cpus[NCPU];
+ 
+ // per-process data for the trap handling code in trampoline.S.
+ // sits in a page by itself just under the trampoline page in the
+@@ -105,3 +104,4 @@ struct proc {
+   struct inode *cwd;           // Current directory
+   char name[16];               // Process name (debugging)
+ };
++extern struct  proc proc[NPROC];
+diff --git a/kernel/syscall.c b/kernel/syscall.c
+index 076d965..5e55c31 100644
+--- a/kernel/syscall.c
++++ b/kernel/syscall.c
+@@ -34,7 +34,7 @@ static uint64
+ argraw(int n)
+ {
+   struct proc *p = myproc();
+-  switch (n) {
++  switch(n){
+   case 0:
+     return p->trapframe->a0;
+   case 1:
+@@ -52,33 +52,34 @@ argraw(int n)
+   return -1;
+ }
+ 
+-// Fetch the nth 32-bit system call argument.
+-void
++int
+ argint(int n, int *ip)
+ {
+   *ip = argraw(n);
++  return 0;
+ }
+ 
+-// Retrieve an argument as a pointer.
+-// Doesn't check for legality, since
+-// copyin/copyout will do that.
+-void
++int
+ argaddr(int n, uint64 *ip)
+ {
+   *ip = argraw(n);
++  return 0;
+ }
+ 
+-// Fetch the nth word-sized system call argument as a null-terminated string.
+-// Copies into buf, at most max.
+-// Returns string length if OK (including nul), -1 if error.
+ int
+ argstr(int n, char *buf, int max)
+ {
+   uint64 addr;
+-  argaddr(n, &addr);
++  if(argaddr(n, &addr) < 0)
++    return -1;
+   return fetchstr(addr, buf, max);
+ }
+ 
++// Fetch the nth 32-bit system call argumentgint(int n,
++
++// Fetch the nth word-sized system call argument as a null-terminated string.
++// Copies  buf, at mgstr(int n, }
++
+ // Prototypes for the functions that handle system calls.
+ extern uint64 sys_fork(void);
+ extern uint64 sys_exit(void);
+@@ -101,7 +102,8 @@ extern uint64 sys_unlink(void);
+ extern uint64 sys_link(void);
+ extern uint64 sys_mkdir(void);
+ extern uint64 sys_close(void);
+-
++extern uint64 sys_processinfo(void);
++extern uint64 sys_ps(void);
+ // An array mapping syscall numbers from syscall.h
+ // to the function that handles the system call.
+ static uint64 (*syscalls[])(void) = {
+@@ -126,6 +128,8 @@ static uint64 (*syscalls[])(void) = {
+ [SYS_link]    sys_link,
+ [SYS_mkdir]   sys_mkdir,
+ [SYS_close]   sys_close,
++[SYS_processinfo] sys_processinfo,
++[SYS_ps]      sys_ps,
+ };
+ 
+ void
+diff --git a/kernel/syscall.h b/kernel/syscall.h
+index 3dd926d..0539c85 100644
+--- a/kernel/syscall.h
++++ b/kernel/syscall.h
+@@ -20,3 +20,6 @@
+ #define SYS_link   19
+ #define SYS_mkdir  20
+ #define SYS_close  21
++#define SYS_processinfo 22
++#define SYS_ps     23
++#define SYS_setsched 24
+diff --git a/kernel/sysproc.c b/kernel/sysproc.c
+index 419e727..de388d9 100644
+--- a/kernel/sysproc.c
++++ b/kernel/sysproc.c
+@@ -7,6 +7,23 @@
+ #include "proc.h"
+ #include "vm.h"
+ 
++struct procinfo {
++  int pid;
++  int ppid;
++  int state;
++  uint sz;
++  int ctime;
++  char name[16];
++};
++
++uint64
++sys_ps(void)
++{
++  // very simple version: just print a message for now
++  printf("ps syscall called!\n");
++  return 0;
++}
++
+ uint64
+ sys_exit(void)
+ {
+@@ -107,3 +124,37 @@ sys_uptime(void)
+   release(&tickslock);
+   return xticks;
+ }
++uint64
++sys_processinfo(void)
++{
++  int pid;
++  uint64 uaddr;          // user-space address for struct procinfo
++  struct procinfo info;
++  struct proc *p;
++
++  if(argint(0, &pid) < 0)
++    return -1;
++  if(argaddr(1, &uaddr) < 0)
++    return -1;
++
++  // search the process table
++  for(p = proc; p < &proc[NPROC]; p++){
++    if(p->pid == pid){
++      info.pid = p->pid;
++      info.ppid = p->parent ? p->parent->pid : 0;
++      info.state = p->state;
++      info.sz = p->sz;
++      info.ctime = 0;   // placeholder for now
++      safestrcpy(info.name, p->name, sizeof(info.name));
++
++      if(copyout(myproc()->pagetable, uaddr,
++                 (char*)&info, sizeof(info)) < 0)
++        return -1;
++
++      return 0;
++    }
++  }
++
++  // pid not found
++  return -1;
++}
+diff --git a/sysoroc.c b/sysoroc.c
+new file mode 100644
+index 0000000..e69de29
+diff --git a/user/pinfo.c b/user/pinfo.c
+new file mode 100644
+index 0000000..d67b538
+--- /dev/null
++++ b/user/pinfo.c
+@@ -0,0 +1,30 @@
++#include "kernel/types.h"
++#include "kernel/stat.h"
++#include "user/user.h"
++
++int
++main(int argc, char *argv[])
++{
++  if(argc != 2){
++    fprintf(2, "Usage: pinfo <pid>\n");
++    exit(1);
++  }
++
++  int pid = atoi(argv[1]);
++  struct procinfo info;
++
++  if(processinfo(pid, &info) < 0){
++    printf("processinfo failed for pid %d\n", pid);
++    exit(1);
++  }
++
++  printf("Process info for pid %d:\n", pid);
++  printf("  pid      = %d\n", info.pid);
++  printf("  ppid     = %d\n", info.ppid);
++  printf("  state    = %d\n", info.state);
++  printf("  mem size = %d bytes\n", info.sz);
++  printf("  cpu time = %d\n", info.ctime);
++  printf("  name     = %s\n", info.name);
++
++  exit(0);
++}
+diff --git a/user/ps.c b/user/ps.c
+new file mode 100644
+index 0000000..8c3878c
+--- /dev/null
++++ b/user/ps.c
+@@ -0,0 +1,10 @@
++#include "kernel/types.h"
++#include "kernel/stat.h"
++#include "user/user.h"
++
++int 
++main (int argc,char *argv[])
++{
++  ps();
++   exit(0);
++}
+diff --git a/user/user.h b/user/user.h
+index ac84de9..9db0039 100644
+--- a/user/user.h
++++ b/user/user.h
+@@ -1,8 +1,17 @@
+ #define SBRK_ERROR ((char *)-1)
+ 
+ struct stat;
++struct procinfo {
++  int pid;
++  int ppid;
++  int state;
++  uint sz;
++  int ctime;
++  char name[16];
++};
+ 
+ // system calls
++int ps(void);
+ int fork(void);
+ int exit(int) __attribute__((noreturn));
+ int wait(int*);
+@@ -25,6 +34,8 @@ char* sys_sbrk(int,int);
+ int pause(int);
+ int uptime(void);
+ 
++int processinfo(int pid, struct procinfo *info);
++
+ // ulib.c
+ int stat(const char*, struct stat*);
+ char* strcpy(char*, const char*);

@@ -1,0 +1,24 @@
+# Build artifacts
+*.o
+*.d
+*.asm
+*.sym
+*.img
+
+# Generated binaries
+kernel/kernel
+mkfs/mkfs
+user/_*
+
+# Virtual machine / ISO files
+*.vdi
+*.vbox-prev
+*.iso
+
+# Editors / OS
+.vscode/
+.idea/
+*~
+*.swp
+.DS_Store
+Thumbs.db
