@@ -2,11 +2,7 @@
 
 Course project for **CSE 323 – Operating Systems**.
 
-## Team
 
-- Shouvik Ghosh — 2121986642
-- Junaed Hasan Riad — 2212428042
-- Arnab Das — 2132099642
 
 ## Project Goal
 
@@ -77,13 +73,6 @@ so the CPU-time value in this diff is a placeholder.
     └── xv6-boot.jpeg
 ```
 
-## Important Source Note
-
-This repository is built from the **actual diff report supplied for the project**. The diff is preserved unchanged as both `diff_report.txt` and `project.patch`.
-
-Because the full completed `xv6-riscv` working directory was not supplied, this repository does not pretend to contain unchanged upstream xv6 files or source changes that are absent from the diff.
-
-For a fully buildable GitHub repository, the exact working `xv6-riscv` folder that produced the successful QEMU run should be added to the repository.
 
 ## Evidence
 
